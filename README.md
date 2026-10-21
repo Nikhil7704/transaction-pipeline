@@ -1,6 +1,6 @@
-# Transaction Pipeline
+# High-Throughput Transaction Pipeline
 
-A backend-focused project demonstrating **high-throughput financial transaction processing** with ACID guarantees, row-level locking, idempotency, and a double-entry ledger — built with FastAPI, PostgreSQL, and React.
+A production-grade financial transaction processing engine built with **FastAPI**, **PostgreSQL**, and **React**. Designed to demonstrate how to handle **concurrency, race conditions, ACID guarantees, idempotency, and double-entry bookkeeping** without overengineering the infrastructure.
 
 ---
 
@@ -16,140 +16,238 @@ The database is pre-seeded with 4 test accounts loaded with ₹2,000 each:
 | `diana@transactiq.com` | `diana123` | **#4** | **₹2,000.00** |
 
 **How to test transfers right away:**
-1. Open [http://localhost:5173/login](http://localhost:5173/login)
-2. Login with `alice@transactiq.com` / `alice123`
-3. Transfer **₹500.00** from Account **#1** to Account **#2**
-4. Logout and sign in as `bob@transactiq.com` / `bob123` — see Bob's balance updated to **₹2,500.00**
-5. Check the transaction details to see the generated **Idempotency Key** and double-entry ledger entries!
+1. Open the web app at **[http://localhost:5173/login](http://localhost:5173/login)**
+2. Sign in as `alice@transactiq.com` / `alice123`
+3. Click **Transfer** in the top navigation
+4. Transfer **₹500.00** from Account **#1** to Account **#2** (Bob)
+5. Sign out and log in as `bob@transactiq.com` / `bob123` — see Bob's balance updated to **₹2,500.00**
+6. Click into the transaction in **History** to inspect the **Idempotency Key**, timestamp, and status.
 
 ---
 
-## What This Project Demonstrates
+## The Core Problem
 
-| Concept | Implementation |
-|---------|---------------|
-| **ACID Transactions** | SQLAlchemy session with DB-level atomicity — all or nothing on every transfer |
-| **Row-level Locking** | `SELECT ... FOR UPDATE` on both accounts before any debit/credit |
-| **Deadlock Prevention** | Deterministic lock ordering (always lock lower account ID first) |
-| **Idempotency** | `Idempotency-Key` header + DB unique constraint — same request never processes twice |
-| **Double-entry Ledger** | Every transfer creates a DEBIT + CREDIT ledger entry |
-| **JWT Authentication** | HS256 tokens, 30-minute expiry, Bearer header on all protected routes |
-| **Password Hashing** | bcrypt with salt — passwords never stored in plain text |
-| **Connection Pooling** | SQLAlchemy pool (size=20, overflow=30) for concurrent load |
-| **Input Validation** | Pydantic schemas — amount must be > 0 and ≤ ₹1,00,00,000 |
-| **Structured Logging** | Every transfer logs transaction_id and latency_ms |
+When handling financial transactions, standard CRUD operations fail under concurrent load:
+
+```
+Initial Balance = ₹1,000
+
+Thread 1: Transfer ₹700   ──► Reads balance: ₹1,000 ──► Approves
+Thread 2: Transfer ₹700   ──► Reads balance: ₹1,000 ──► Approves
+
+Result: ₹1,400 spent from an account with only ₹1,000! ❌ (Lost Update / Double Spend)
+```
+
+This project eliminates race conditions, deadlocks, and duplicate transfers using **PostgreSQL row-level locking (`SELECT FOR UPDATE`)**, **deterministic lock ordering**, and **unique idempotency keys**.
+
+---
+
+## Key Engineering Guarantees
+
+| Guarantee | How It Is Implemented |
+|---|---|
+| **ACID Atomicity** | Every transfer executes in a single database transaction — balance debits, credits, transaction creation, and ledger writes commit together or rollback completely. |
+| **Race Condition Prevention** | PostgreSQL row-level locks (`SELECT ... FOR UPDATE`) are acquired on both accounts before checking balances or performing math. |
+| **Deadlock Prevention** | Accounts are always locked in ascending ID order (`min(id)` first, then `max(id)`), eliminating cyclic wait conditions. |
+| **Idempotency** | Clients pass an `Idempotency-Key` UUID. A database unique constraint ensures identical requests return cached results and never execute twice. |
+| **Auditability (Double-Entry)** | Every transaction writes two immutable `ledger_entries`: one DEBIT and one CREDIT, guaranteeing zero money creation/destruction. |
+| **Currency Precision** | All balances use `NUMERIC(18, 2)` — floating-point rounding errors are strictly avoided. |
+| **Connection Pooling** | SQLAlchemy connection pool (`pool_size=20`, `max_overflow=30`) configured to handle burst concurrent load. |
+| **Structured Logging** | Every transfer logs `transaction_id`, accounts involved, amount, and `latency_ms`. |
 
 ---
 
 ## Tech Stack
 
 ### Backend
-- **FastAPI** — async-ready Python web framework
-- **SQLAlchemy 2.x** — ORM with row-level locking support
-- **PostgreSQL (Neon)** — cloud-hosted serverless PostgreSQL
-- **Alembic** — database migrations
-- **bcrypt** — password hashing
-- **PyJWT** — JWT token generation and verification
-- **Pydantic v2** — request/response validation
-- **python-dotenv** — environment variable management
+- **FastAPI** — high-performance Python framework with native async support and OpenAPI docs
+- **SQLAlchemy 2.x** — ORM providing row-level locking (`with_for_update`) and connection pooling
+- **PostgreSQL (Neon)** — cloud-hosted serverless PostgreSQL with ACID compliance
+- **Alembic** — database migration engine
+- **bcrypt** — secure salted password hashing
+- **PyJWT** — stateless JSON Web Token (HS256) auth with 30-minute expiration
+- **Pydantic v2** — strict request validation and response serialization
+- **Pytest + AnyIO** — test suite including async concurrency stress testing
 
 ### Frontend
-- **React 18** + **Vite** — fast, modern frontend
-- **React Router v6** — client-side routing with protected routes
-- **Axios** — HTTP client with JWT interceptor
-- Plain **CSS** — custom dark theme, no bloated UI libraries
-
-### Infrastructure
-- **Neon** — serverless PostgreSQL (cloud)
-- **GitHub** — version control
+- **React 18** + **Vite** — responsive client with fast HMR
+- **React Router v6** — client-side routing with `ProtectedRoute` guards
+- **Axios** — HTTP client configured with JWT auto-injection interceptors
+- **Custom Modern Theme** — bespoke dark theme UI, zero bulky third-party component libraries
 
 ---
 
-## Architecture
+## System Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                      React Frontend                      │
-│          (Login / Dashboard / Transfer / History)        │
-└───────────────────────────┬─────────────────────────────┘
-                            │ HTTP + JWT
-                            ▼
-┌─────────────────────────────────────────────────────────┐
-│                    FastAPI Backend                       │
-│                                                          │
-│  /auth/register   /auth/login                           │
-│  /accounts        /accounts/{id}/balance                │
-│  /transactions/transfer   /transactions/history         │
-│                                                          │
-│  ┌────────────┐  ┌──────────────┐  ┌─────────────────┐ │
-│  │ API Layer  │→ │ Service Layer│→ │   Models / ORM  │ │
-│  │ (Routers)  │  │(transaction_ │  │ User, Account,  │ │
-│  │            │  │  service.py) │  │ Transaction,    │ │
-│  └────────────┘  └──────────────┘  │ LedgerEntry     │ │
-│                                    └────────┬────────┘ │
-└─────────────────────────────────────────────┼───────────┘
-                                              │ SQLAlchemy
-                                              ▼
-                                    ┌──────────────────┐
-                                    │  PostgreSQL       │
-                                    │  (Neon Cloud)     │
-                                    └──────────────────┘
-```
-
----
-
-## Database Schema
-
-```
-users
-  id, email (unique), password_hash, created_at
-
-accounts
-  id, user_id (FK), balance (NUMERIC 18,2), currency, created_at, updated_at
-
-transactions
-  id, source_account_id (FK), destination_account_id (FK),
-  amount, status (ENUM), idempotency_key (unique), created_at
-
-ledger_entries
-  id, transaction_id (FK), account_id (FK),
-  entry_type (DEBIT/CREDIT), amount, created_at
+┌──────────────────────────────────────────────────────────────┐
+│                    React Web Frontend                        │
+│   (Overview / Wallets / Money Transfer / Audit History)       │
+└──────────────────────────────┬───────────────────────────────┘
+                               │ Bearer JWT + Idempotency-Key
+                               ▼
+┌──────────────────────────────────────────────────────────────┐
+│                     FastAPI Application                      │
+│                                                              │
+│  ┌─────────────────┐   ┌─────────────────┐   ┌────────────┐  │
+│  │   Auth Router   │   │ Accounts Router │   │ TX Router  │  │
+│  └────────┬────────┘   └────────┬────────┘   └─────┬──────┘  │
+│           │                     │                  │         │
+│           ▼                     ▼                  ▼         │
+│   JWT Dependencies      Ownership Check     Transfer Engine  │
+│  ┌────────────────────────────────────────────────────────┐  │
+│  │               Transaction Service Layer                │  │
+│  │                                                        │  │
+│  │   1. Check Idempotency Key in Database                 │  │
+│  │   2. Begin DB Transaction                              │  │
+│  │   3. Sort account IDs: lock lower ID first             │  │
+│  │   4. SELECT ... FOR UPDATE (Row-level lock)            │  │
+│  │   5. Verify source has sufficient balance              │  │
+│  │   6. Debit Source Account (-amount)                    │  │
+│  │   7. Credit Destination Account (+amount)              │  │
+│  │   8. Insert Transaction (COMPLETED)                    │  │
+│  │   9. Insert 2x Ledger Entries (DEBIT + CREDIT)         │  │
+│  │  10. COMMIT & Log Latency                              │  │
+│  └───────────────────────────┬────────────────────────────┘  │
+└──────────────────────────────┼───────────────────────────────┘
+                               │ SQLAlchemy Pool (20 + 30)
+                               ▼
+┌──────────────────────────────────────────────────────────────┐
+│                 PostgreSQL (Neon Cloud)                      │
+│   users  │  accounts  │  transactions  │  ledger_entries     │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## API Endpoints
+## Database Schema & Models
 
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| POST | `/auth/register` | No | Register with email + password |
-| POST | `/auth/login` | No | Login → returns JWT |
-| GET | `/accounts` | Bearer JWT | List all accounts of the logged-in user |
-| POST | `/accounts` | Bearer JWT | Create a new account (currency defaults to INR) |
-| GET | `/accounts/{id}` | Bearer JWT | Get account details |
-| GET | `/accounts/{id}/balance` | Bearer JWT | Get account balance |
-| POST | `/transactions/transfer` | Bearer JWT | Transfer funds (optional `Idempotency-Key` header) |
-| GET | `/transactions/history` | Bearer JWT | List all user transactions |
-| GET | `/transactions/{id}` | Bearer JWT | Get single transaction detail |
-| GET | `/` | No | Health check |
+### `users`
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | `INTEGER` | Primary Key, Index | Unique user ID |
+| `email` | `VARCHAR` | Unique, Index, Not Null | User login email |
+| `password_hash` | `VARCHAR` | Not Null | bcrypt hash |
+| `created_at` | `TIMESTAMP` | Default `NOW()` | Registration timestamp |
+
+### `accounts`
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | `INTEGER` | Primary Key, Index | Account number |
+| `user_id` | `INTEGER` | Foreign Key → `users.id`, Index | Account owner |
+| `balance` | `NUMERIC(18,2)` | Not Null, Default `0.00` | Account balance |
+| `currency` | `VARCHAR(3)` | Default `'INR'` | Currency code (INR, USD, etc.) |
+| `created_at` | `TIMESTAMP` | Default `NOW()` | Creation timestamp |
+| `updated_at` | `TIMESTAMP` | On Update `NOW()` | Last modified timestamp |
+
+### `transactions`
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | `INTEGER` | Primary Key, Index | Unique transaction reference |
+| `source_account_id` | `INTEGER` | Foreign Key → `accounts.id`, Index | Sender account |
+| `destination_account_id` | `INTEGER` | Foreign Key → `accounts.id`, Index | Receiver account |
+| `amount` | `NUMERIC(18,2)` | Not Null | Amount transferred |
+| `status` | `VARCHAR` | Not Null | `PENDING`, `COMPLETED`, `FAILED` |
+| `idempotency_key` | `VARCHAR` | Unique, Index | Client idempotency UUID |
+| `created_at` | `TIMESTAMP` | Default `NOW()` | Execution timestamp |
+
+### `ledger_entries`
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | `INTEGER` | Primary Key, Index | Ledger entry ID |
+| `transaction_id` | `INTEGER` | Foreign Key → `transactions.id`, Index | Associated transaction |
+| `account_id` | `INTEGER` | Foreign Key → `accounts.id`, Index | Affected account |
+| `entry_type` | `VARCHAR(10)` | Not Null | `DEBIT` or `CREDIT` |
+| `amount` | `NUMERIC(18,2)` | Not Null | Entry amount |
+| `created_at` | `TIMESTAMP` | Default `NOW()` | Timestamp |
 
 ---
 
-## Transfer Flow (Core Logic)
+## Detailed Engineering Concepts
+
+### 1. Row-Level Locking (`SELECT FOR UPDATE`)
+To avoid dirty reads and lost updates during concurrent requests, accounts are locked at the database level:
+```python
+# Acquire locks on both accounts simultaneously
+accounts = (
+    db.query(Account)
+    .filter(Account.id.in_([first_id, second_id]))
+    .with_for_update()
+    .all()
+)
+```
+Any competing transaction targeting either account is queued by PostgreSQL until the active transaction issues a `COMMIT` or `ROLLBACK`.
+
+### 2. Deadlock Prevention via Deterministic Ordering
+When two transfers happen concurrently between the same accounts in opposite directions:
+- Request 1: Account 1 ➔ Account 2
+- Request 2: Account 2 ➔ Account 1
+
+If Request 1 locks Account 1 and waits for Account 2, while Request 2 locks Account 2 and waits for Account 1, a **deadlock** occurs.
+
+**Solution:** Always acquire locks in ascending order by account ID:
+```python
+first_id, second_id = sorted([source_id, destination_id])
+# Always lock first_id before second_id
+```
+Both threads attempt to lock Account 1 first. The second thread blocks cleanly before holding any conflicting locks, completely eliminating the deadlock.
+
+### 3. Idempotency Under Network Retries
+If a client experiences a timeout after sending a transfer:
+```
+Client  ──[ POST /transfer (₹500, Key: "uuid-123") ]──►  Server (Processed in DB)
+Client  ◄──[ Network Disconnect / Timeout ]────────────── Server
+Client  ──[ Retry POST /transfer (₹500, Key: "uuid-123") ]──► Server
+```
+- The backend checks if a transaction with `idempotency_key == "uuid-123"` exists.
+- If found, it immediately returns the original response with HTTP 200 without executing the transfer a second time.
+- The unique database index on `idempotency_key` guarantees that even two identical requests arriving simultaneously cannot both write to the table.
+
+### 4. Double-Entry Bookkeeping
+Money must never appear or disappear from thin air. Every transaction creates matching debit and credit entries:
+```
+Transaction #101: Transfer ₹500 from Account #1 to Account #2
+  Ledger Entry 1: Account #1 ➔ DEBIT  ₹500.00
+  Ledger Entry 2: Account #2 ➔ CREDIT ₹500.00
+  Net Sum = ₹0.00 (Balanced)
+```
+
+---
+
+## API Endpoints Reference
+
+| Method | Endpoint | Auth | Headers | Description |
+|---|---|---|---|---|
+| `POST` | `/auth/register` | Public | — | Register new user (`email`, `password`) |
+| `POST` | `/auth/login` | Public | — | Authenticate user, returns Bearer JWT |
+| `GET` | `/accounts` | Bearer JWT | — | List all accounts owned by current user |
+| `POST` | `/accounts` | Bearer JWT | — | Create account (`currency` defaults to `'INR'`) |
+| `GET` | `/accounts/{id}` | Bearer JWT | — | Retrieve account details (ownership enforced) |
+| `GET` | `/accounts/{id}/balance` | Bearer JWT | — | Retrieve account balance |
+| `POST` | `/transactions/transfer` | Bearer JWT | `Idempotency-Key` (opt) | Execute transfer (`source`, `destination`, `amount`) |
+| `GET` | `/transactions/history` | Bearer JWT | — | List all transactions for user's accounts |
+| `GET` | `/transactions/{id}` | Bearer JWT | — | Get single transaction detail |
+| `GET` | `/` | Public | — | Health check |
+
+---
+
+## Concurrency Testing (The Stress Test)
+
+The project includes an automated stress test ([`tests/test_concurrency.py`](file:///d:/Transaction%20pipeline/tests/test_concurrency.py)) to verify database-level correctness:
 
 ```
-POST /transactions/transfer
-  1. Verify source account ownership (403 if not owner)
-  2. Check idempotency_key — if seen before, return cached result
-  3. Acquire row-level locks in deterministic order (prevents deadlocks)
-     → LOWER account ID locked first, always
-  4. Validate sufficient balance on source account
-  5. Debit source account  (-amount)
-  6. Credit destination account (+amount)
-  7. Create Transaction record (status=COMPLETED)
-  8. Create 2 LedgerEntry records (DEBIT + CREDIT)
-  9. Commit — all 6 DB writes are atomic
- 10. Log: transaction_id, amount, latency_ms
+Test Setup:
+  Account A balance = ₹100,000.00
+  Account B balance = ₹0.00
+
+Test Action:
+  Fire 100 concurrent async HTTP transfer requests (₹1,000.00 each) from A to B.
+
+Verification:
+  - Account A final balance = ₹0.00
+  - Account B final balance = ₹100,000.00
+  - Exactly 100 transactions recorded
+  - No negative balance, no lost update, zero duplicate transactions
 ```
 
 ---
@@ -159,110 +257,71 @@ POST /transactions/transfer
 ### Prerequisites
 - Python 3.10+
 - Node.js 18+
-- A PostgreSQL database (local or cloud — e.g. [Neon](https://neon.tech))
+- PostgreSQL database (local or cloud instance like [Neon](https://neon.tech))
 
-### 1. Clone the repo
+### 1. Clone the repository
 ```bash
 git clone https://github.com/Nikhil7704/transaction-pipeline.git
 cd transaction-pipeline
 ```
 
-### 2. Create virtual environment & install dependencies
+### 2. Backend Setup
 ```bash
 python -m venv venv
+
 # Windows:
 .\venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
-### 3. Configure environment
-```bash
-cp .env.example .env
-# Edit .env with your DATABASE_URL, SECRET_KEY etc.
+### 3. Environment Configuration
+Create a `.env` file in the root directory:
+```env
+DATABASE_URL=postgresql://user:password@host/dbname?sslmode=require
+TEST_DATABASE_URL=postgresql://user:password@host/dbname_test?sslmode=require
+SECRET_KEY=your-super-secret-key-12345
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
 ```
 
-### 4. Run migrations & seed accounts
+### 4. Database Migrations & Seeding
 ```bash
+# Run migrations
 .\venv\Scripts\python.exe -m alembic upgrade head
+
+# Seed dummy accounts (Alice, Bob, Charlie, Diana with ₹2,000 each)
 .\venv\Scripts\python.exe seed.py
 ```
 
-### 5. Start the backend
+### 5. Start Servers
 ```bash
+# Terminal 1 — Backend (http://127.0.0.1:8000)
 .\venv\Scripts\python.exe -m uvicorn app.main:app --reload
-```
 
-### 6. Start the frontend
-```bash
+# Terminal 2 — Frontend (http://localhost:5173)
 cd frontend
 npm install
 npm run dev
 ```
 
-- Backend runs at `http://127.0.0.1:8000`
-- Frontend runs at `http://localhost:5173`
-- Interactive Swagger docs at `http://127.0.0.1:8000/docs`
-
----
-
-## Running Tests
-
+### 6. Run Automated Tests
 ```bash
 .\venv\Scripts\python.exe -m pytest tests/ -v
 ```
 
-Test coverage:
-- `test_auth.py` — register, duplicate email, login, wrong password
-- `test_accounts.py` — create account, get balance
-- `test_transactions.py` — successful transfer, insufficient balance, idempotency
-- `test_concurrency.py` — 100 concurrent transfers stress test
+---
+
+## Architectural FAQ & Design Decisions
+
+#### Why not use Redis or Kafka?
+For systems processing hundreds to low thousands of transactions per second, PostgreSQL alone with row-level locks and connection pooling is faster, strictly ACID-compliant, and simpler to operate. Introducing message brokers or caches for core account balances introduces cache invalidation challenges, eventual consistency, and distributed failure modes without solving a real bottleneck at this scale.
+
+#### Why NUMERIC instead of Float?
+IEEE 754 floating-point numbers cannot accurately represent decimals like `0.1` or `0.2` (`0.1 + 0.2 = 0.30000000000000004`). In financial systems, accumulated rounding errors cause balance drift. `NUMERIC(18, 2)` stores exact decimal values with arbitrary precision.
+
+#### How does connection pooling protect the database?
+SQLAlchemy's QueuePool manages pre-warmed database connections (`pool_size=20`, `max_overflow=30`). This prevents sudden traffic spikes from exhausting PostgreSQL process limits while reusing connections efficiently.
 
 ---
 
-## Project Structure
-
-```
-transaction-pipeline/
-├── app/
-│   ├── api/
-│   │   ├── auth.py          # Register + Login endpoints
-│   │   ├── accounts.py      # Account CRUD (list, create, get, balance)
-│   │   └── transactions.py  # Transfer + History endpoints
-│   ├── core/
-│   │   ├── security.py      # bcrypt hashing, JWT creation
-│   │   └── dependencies.py  # get_current_user dependency
-│   ├── db/
-│   │   └── database.py      # Engine, SessionLocal, connection pool
-│   ├── models/              # SQLAlchemy ORM models
-│   ├── schemas/             # Pydantic request/response schemas
-│   ├── services/
-│   │   └── transaction_service.py  # Core transfer logic
-│   └── main.py              # FastAPI app, CORS, router registration
-├── alembic/                 # Database migrations
-├── frontend/                # React 18 + Vite frontend
-│   └── src/
-│       ├── pages/           # Login, Dashboard, Accounts, Transfer, History
-│       ├── components/      # Navbar, ProtectedRoute
-│       ├── context/         # AuthContext (JWT state)
-│       └── api/client.js    # Axios instance with JWT interceptor
-├── tests/                   # Pytest test suite
-├── seed.py                  # Dummy data seeder
-├── requirements.txt
-├── .env.example
-└── README.md
-```
-
----
-
-## Key Design Decisions
-
-**Why PostgreSQL?**  
-Row-level locking (`SELECT FOR UPDATE`) and ACID transactions are first-class features. SQLite cannot handle concurrent writes safely.
-
-**Why no Redis?**  
-Idempotency is enforced at the DB layer via a `UNIQUE` constraint on `idempotency_key`. For this scale, an extra cache layer adds complexity without benefit.
-
-**Why deterministic lock ordering?**  
-When two concurrent transfers involve the same two accounts in opposite directions, both would try to lock the same rows in opposite orders — causing a deadlock. Always locking the lower account ID first breaks the cycle.
-
-**Why double-entry ledger?**  
-Every financial system needs an audit trail. The ledger makes it trivial to reconstruct any account's balance history and verify that money was never created or destroyed.
+## License
+MIT
