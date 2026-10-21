@@ -1,0 +1,165 @@
+.create-form-card {
+  background: #0f0f12;
+  border: 1px solid #1e1e24;
+  border-radius: 10px;
+  padding: 1.5rem;
+  margin-bottom: 1.75rem;
+  max-width: 380px;
+}
+
+.create-form-card h3 {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #bbb;
+  margin: 0 0 1.25rem;
+}
+
+.create-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field-group label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #888;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.field-group input,
+.select-input {
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid #222228;
+  background: #141417;
+  color: #e8e8e8;
+  font-size: 0.9rem;
+  outline: none;
+  transition: border-color 0.15s;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.field-group input:focus,
+.select-input:focus {
+  border-color: #7c6af5;
+}
+
+.field-group input::placeholder {
+  color: #3a3a42;
+}
+
+.form-error {
+  font-size: 0.82rem;
+  color: #e05c6a;
+  background: #1e1215;
+  border: 1px solid #3a1a20;
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin: 0;
+}
+
+/* Account list */
+.acct-list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #1a1a1e;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.acct-list-item {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  background: #0f0f12;
+  text-decoration: none;
+  border-bottom: 1px solid #141418;
+  transition: background 0.1s;
+}
+
+.acct-list-item:last-child {
+  border-bottom: none;
+}
+
+.acct-list-item:hover {
+  background: #111116;
+}
+
+.acct-list-left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex: 1;
+}
+
+.acct-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: #1a1832;
+  border: 1px solid #2d2960;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #9d8fff;
+  flex-shrink: 0;
+}
+
+.acct-list-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #ddd;
+}
+
+.acct-list-id {
+  font-size: 0.75rem;
+  color: #555;
+  margin-top: 2px;
+}
+
+.acct-list-right {
+  text-align: right;
+}
+
+.acct-list-balance {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #e8e8e8;
+}
+
+.acct-list-label {
+  font-size: 0.72rem;
+  color: #444;
+}
+
+.acct-arrow {
+  font-size: 1.2rem;
+  color: #333;
+  margin-left: 0.5rem;
+}
+
+.spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

@@ -1,0 +1,72 @@
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: #555;
+  margin-bottom: 1.5rem;
+}
+
+.breadcrumb-sep {
+  color: #333;
+}
+
+.breadcrumb span:last-child {
+  color: #888;
+}
+
+.acct-detail-hero {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.acct-detail-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: #1a1832;
+  border: 1px solid #2d2960;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #9d8fff;
+  flex-shrink: 0;
+}
+
+.balance-hero {
+  background: linear-gradient(135deg, #0f0e1a, #13122a);
+  border: 1px solid #2a2660;
+  border-radius: 12px;
+  padding: 1.5rem 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.balance-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #7c6af5;
+}
+
+.balance-amount {
+  font-size: 2.4rem;
+  font-weight: 800;
+  color: #f0f0f0;
+  letter-spacing: -1px;
+}
+
+.error-banner {
+  background: #1e1214;
+  border: 1px solid #3a1820;
+  color: #f87171;
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  font-size: 0.875rem;
+}
