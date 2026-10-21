@@ -16,7 +16,10 @@ TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engin
 def setup_db():
     Base.metadata.create_all(bind=engine)
     yield
-    Base.metadata.drop_all(bind=engine)
+    # Only drop tables if a distinct test database is configured
+    main_db = os.getenv("DATABASE_URL", "")
+    if TEST_DATABASE_URL != main_db:
+        Base.metadata.drop_all(bind=engine)
 
 @pytest.fixture(scope="function")
 def db_session(setup_db):

@@ -1,3 +1,4 @@
+from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.db.database import get_db
@@ -7,6 +8,10 @@ from app.schemas.account import AccountCreate, AccountResponse, AccountBalanceRe
 from app.core.dependencies import get_current_user
 
 router = APIRouter(prefix="/accounts", tags=["accounts"])
+
+@router.get("", response_model=List[AccountResponse])
+def get_user_accounts(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    return db.query(Account).filter(Account.user_id == current_user.id).order_by(Account.id.asc()).all()
 
 @router.post("", response_model=AccountResponse)
 def create_account(account_in: AccountCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):

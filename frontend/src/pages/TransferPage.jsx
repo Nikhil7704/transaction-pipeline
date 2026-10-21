@@ -26,13 +26,14 @@ export default function TransferPage() {
   useEffect(() => {
     const load = async () => {
       try {
-        const hist = await api.get('/transactions/history');
-        const ids = [...new Set(hist.data.flatMap((t) => [t.source_account_id, t.destination_account_id]))];
-        const results = await Promise.allSettled(ids.map((id) => api.get(`/accounts/${id}`)));
-        const own = results.filter((r) => r.status === 'fulfilled').map((r) => r.value.data);
+        const res = await api.get('/accounts');
+        const own = res.data || [];
         setAccounts(own);
-        if (!prefillFrom && own.length > 0) {
-          setForm((f) => ({ ...f, source_account_id: String(own[0].id) }));
+        if (own.length > 0) {
+          const defaultId = prefillFrom && own.some(a => String(a.id) === String(prefillFrom))
+            ? String(prefillFrom)
+            : String(own[0].id);
+          setForm((f) => ({ ...f, source_account_id: defaultId }));
         }
       } catch {
         setAccounts([]);

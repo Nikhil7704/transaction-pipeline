@@ -40,29 +40,19 @@ export default function DashboardPage() {
   useEffect(() => {
     const load = async () => {
       try {
-        // We fetch history first, which tells us the account IDs
-        const histRes = await api.get('/transactions/history');
-        const hist = histRes.data;
-        setTransactions(hist.slice(0, 8));
+        const [acctsRes, histRes] = await Promise.allSettled([
+          api.get('/accounts'),
+          api.get('/transactions/history'),
+        ]);
 
-        // Collect unique account IDs visible to the user
-        const ids = new Set();
-        hist.forEach((t) => {
-          ids.add(t.source_account_id);
-          ids.add(t.destination_account_id);
-        });
-        setAccountIds([...ids]);
-
-        // Fetch balances for each account we own (403 = not ours, skip)
-        const acctResults = await Promise.allSettled(
-          [...ids].map((id) => api.get(`/accounts/${id}`))
-        );
-        const ownedAccts = acctResults
-          .filter((r) => r.status === 'fulfilled')
-          .map((r) => r.value.data);
-        setAccounts(ownedAccts);
-      } catch {
-        // no transactions yet; accounts still empty
+        if (acctsRes.status === 'fulfilled') {
+          setAccounts(acctsRes.value.data || []);
+        }
+        if (histRes.status === 'fulfilled') {
+          setTransactions(histRes.value.data.slice(0, 8) || []);
+        }
+      } catch (err) {
+        console.error('Failed to load dashboard data:', err);
       } finally {
         setLoading(false);
       }

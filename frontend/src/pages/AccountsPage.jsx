@@ -22,20 +22,12 @@ export default function AccountsPage() {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
 
-  const fetchAccounts = async (ids) => {
-    if (!ids || ids.length === 0) return;
-    const results = await Promise.allSettled(ids.map((id) => api.get(`/accounts/${id}`)));
-    return results.filter((r) => r.status === 'fulfilled').map((r) => r.value.data);
-  };
-
   useEffect(() => {
     const load = async () => {
       try {
-        const hist = await api.get('/transactions/history');
-        const ids = [...new Set(hist.data.flatMap((t) => [t.source_account_id, t.destination_account_id]))];
-        const accts = await fetchAccounts(ids);
-        setAccounts(accts || []);
-      } catch {
+        const res = await api.get('/accounts');
+        setAccounts(res.data || []);
+      } catch (err) {
         setAccounts([]);
       } finally {
         setLoading(false);
